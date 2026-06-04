@@ -1,88 +1,104 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Landing from './pages/Landing';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { supabase } from './lib/supabase';
+import AuthListener from './lib/auth/AuthListener';
+import { redirectByRole } from './lib/auth/redirectByRole';
+
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import SellerDashboard from './pages/SellerDashboard';
-import CreatorDashboard from './pages/CreatorDashboard';
-import CreateCampaign from './pages/CreateCampaign';
-import AuthListener from './lib/auth/AuthListener';
-import { Loader2 } from 'lucide-react';
 
-// Route protector component
+// Placeholder dashboards — replace with your real components
+const SellerDashboard = () => <div>Seller Dashboard</div>;
+const CreatorDashboard = () => <div>Creator Dashboard</div>;
+
+/**
+ * ProtectedRoute
+ * Wraps a route and enforces:
+ *   1. User must be authenticated
+ *   2. User's role must match the `allowedRole` prop (if provided)
+ */
 function ProtectedRoute({ children, allowedRole }) {
-  const { user, profile, loading } = useAuth();
+  const [status, setStatus] = useState('loading'); // 'loading' | 'authorized' | 'unauthorized' | 'wrong-role'
+  const [redirectTo, setRedirectTo] = useState(null);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 animate-spin text-brand-600" />
-      </div>
-    );
-  }
+  useEffect(() => {
+    const check = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+      if (!session?.user) {
+        setStatus('unauthorized');
+        return;
+      }
 
-  if (allowedRole && profile?.role !== allowedRole) {
-    // If user has a different role, send them to their corresponding dashboard
-    if (profile?.role === 'seller') {
-      return <Navigate to="/dashboard/seller" replace />;
-    } else if (profile?.role === 'creator') {
-      return <Navigate to="/dashboard/creator" replace />;
-    }
-    return <Navigate to="/" replace />;
-  }
+      if (!allowedRole) {
+        setStatus('authorized');
+        return;
+      }
 
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('auth_id', session.user.id)
+        .single();
+
+      if (error || !data) {
+        setStatus('unauthorized');
+        return;
+      }
+
+      if (data.role !== allowedRole) {
+        // Redirect to the correct dashboard instead of 403
+        setRedirectTo(redirectByRole(data.role));
+        setStatus('wrong-role');
+        return;
+      }
+
+      setStatus('authorized');
+    };
+
+    check();
+  }, [allowedRole]);
+
+  if (status === 'loading') return null; // or a spinner
+  if (status === 'unauthorized') return <Navigate to="/login" replace />;
+  if (status === 'wrong-role') return <Navigate to={redirectTo} replace />;
   return children;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AuthListener />
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+    <BrowserRouter>
+      {/* AuthListener must be inside BrowserRouter to use useNavigate */}
+      <AuthListener />
 
-          {/* Seller Routes */}
-          <Route 
-            path="/dashboard/seller" 
-            element={
-              <ProtectedRoute allowedRole="seller">
-                <SellerDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/dashboard/seller/create-campaign" 
-            element={
-              <ProtectedRoute allowedRole="seller">
-                <CreateCampaign />
-              </ProtectedRoute>
-            } 
-          />
+      <Routes>
+        {/* Public */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
 
-          {/* Creator Routes */}
-          <Route 
-            path="/dashboard/creator" 
-            element={
-              <ProtectedRoute allowedRole="creator">
-                <CreatorDashboard />
-              </ProtectedRoute>
-            } 
-          />
+        {/* Protected — Seller */}
+        <Route
+          path="/dashboard/seller"
+          element={
+            <ProtectedRoute allowedRole="seller">
+              <SellerDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-          {/* Catch-all redirection */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
-    </AuthProvider>
+        {/* Protected — Creator */}
+        <Route
+          path="/dashboard/creator"
+          element={
+            <ProtectedRoute allowedRole="creator">
+              <CreatorDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
-
