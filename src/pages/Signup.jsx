@@ -43,9 +43,9 @@ export default function Signup() {
     try {
       await signUp(email, password, role, additionalData);
       if (role === 'seller') {
-        navigate('/seller/dashboard');
+        navigate('/dashboard/seller');
       } else {
-        navigate('/creator/dashboard');
+        navigate('/dashboard/creator');
       }
     } catch (err) {
       console.error(err);

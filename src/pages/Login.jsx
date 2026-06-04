@@ -18,9 +18,9 @@ export default function Login() {
     try {
       const { profile } = await signIn(email, password);
       if (profile?.role === 'seller') {
-        navigate('/seller/dashboard');
+        navigate('/dashboard/seller');
       } else if (profile?.role === 'creator') {
-        navigate('/creator/dashboard');
+        navigate('/dashboard/creator');
       } else {
         navigate('/');
       }

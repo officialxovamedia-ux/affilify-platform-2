@@ -7,6 +7,7 @@ import Signup from './pages/Signup';
 import SellerDashboard from './pages/SellerDashboard';
 import CreatorDashboard from './pages/CreatorDashboard';
 import CreateCampaign from './pages/CreateCampaign';
+import AuthListener from './lib/auth/AuthListener';
 import { Loader2 } from 'lucide-react';
 
 // Route protector component
@@ -28,9 +29,9 @@ function ProtectedRoute({ children, allowedRole }) {
   if (allowedRole && profile?.role !== allowedRole) {
     // If user has a different role, send them to their corresponding dashboard
     if (profile?.role === 'seller') {
-      return <Navigate to="/seller/dashboard" replace />;
+      return <Navigate to="/dashboard/seller" replace />;
     } else if (profile?.role === 'creator') {
-      return <Navigate to="/creator/dashboard" replace />;
+      return <Navigate to="/dashboard/creator" replace />;
     }
     return <Navigate to="/" replace />;
   }
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
+        <AuthListener />
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
@@ -50,7 +52,7 @@ export default function App() {
 
           {/* Seller Routes */}
           <Route 
-            path="/seller/dashboard" 
+            path="/dashboard/seller" 
             element={
               <ProtectedRoute allowedRole="seller">
                 <SellerDashboard />
@@ -58,7 +60,7 @@ export default function App() {
             } 
           />
           <Route 
-            path="/seller/create-campaign" 
+            path="/dashboard/seller/create-campaign" 
             element={
               <ProtectedRoute allowedRole="seller">
                 <CreateCampaign />
@@ -68,7 +70,7 @@ export default function App() {
 
           {/* Creator Routes */}
           <Route 
-            path="/creator/dashboard" 
+            path="/dashboard/creator" 
             element={
               <ProtectedRoute allowedRole="creator">
                 <CreatorDashboard />
@@ -83,3 +85,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+

@@ -42,7 +42,7 @@ export default function CreateCampaign() {
 
       if (campErr) throw campErr;
 
-      navigate('/seller/dashboard');
+      navigate('/dashboard/seller');
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to launch campaign.');
@@ -55,7 +55,7 @@ export default function CreateCampaign() {
     <div className="min-h-screen bg-slate-50 py-12 px-6">
       <div className="max-w-2xl mx-auto space-y-8">
         {/* Back Link */}
-        <Link to="/seller/dashboard" className="inline-flex items-center space-x-2 text-slate-500 hover:text-brand-650 transition-colors">
+        <Link to="/dashboard/seller" className="inline-flex items-center space-x-2 text-slate-500 hover:text-brand-650 transition-colors">
           <ArrowLeft className="w-5 h-5" />
           <span className="font-bold text-sm">Back to Dashboard</span>
         </Link>

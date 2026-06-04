@@ -258,7 +258,7 @@ export default function SellerDashboard() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-slate-900">Your Active Campaigns</h2>
               <Link 
-                to="/seller/create-campaign" 
+                to="/dashboard/seller/create-campaign" 
                 className="gradient-bg text-white px-4 py-2.5 rounded-xl font-bold flex items-center space-x-2 shadow-lg shadow-brand-500/10 hover:opacity-95 transform hover:-translate-y-0.5 transition-all duration-200"
               >
                 <Plus className="w-5 h-5" />
@@ -275,7 +275,7 @@ export default function SellerDashboard() {
                 <p className="text-slate-500 text-sm">
                   Create a campaign to list products, define commission rates, and let creators promote them.
                 </p>
-                <Link to="/seller/create-campaign" className="inline-block gradient-bg text-white font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-brand-500/10 hover:opacity-95 transition-all">
+                <Link to="/dashboard/seller/create-campaign" className="inline-block gradient-bg text-white font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-brand-500/10 hover:opacity-95 transition-all">
                   Launch Your First Campaign
                 </Link>
               </div>
