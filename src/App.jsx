@@ -4,7 +4,8 @@ import { supabase } from './lib/supabase';
 import AuthListener from './lib/auth/AuthListener';
 import { redirectByRole } from './lib/auth/redirectByRole';
 
-import Login from './pages/Login';
+import Landing from './pages/Landing';
+ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import SellerDashboard from './pages/SellerDashboard';
 import CreatorDashboard from './pages/CreatorDashboard';
@@ -73,7 +74,8 @@ export default function App() {
 
       <Routes>
         {/* Public */}
-        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Landing />} /> 
+<Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
         {/* Protected — Seller */}
@@ -97,7 +99,7 @@ export default function App() {
         />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
