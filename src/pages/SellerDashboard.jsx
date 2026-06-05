@@ -5,9 +5,8 @@ import { supabase } from '../lib/supabase';
 import DashboardLayout from '../components/DashboardLayout';
 import { 
   Plus, Play, Pause, ChevronRight, ShoppingBag, 
-  Users, DollarSign, ExternalLink, ArrowUpRight, CheckCircle2, AlertCircle, Loader2
+  Users, DollarSign, ExternalLink, ArrowUpRight, CheckCircle2, AlertCircle, Loader2, Target
 } from 'lucide-react';
-
 export default function SellerDashboard() {
   const { user, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();

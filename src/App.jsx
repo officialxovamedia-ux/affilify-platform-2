@@ -6,10 +6,10 @@ import { redirectByRole } from './lib/auth/redirectByRole';
 
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import SellerDashboard from './pages/SellerDashboard';
+import CreatorDashboard from './pages/CreatorDashboard';
 
-// Placeholder dashboards — replace with your real components
-const SellerDashboard = () => <div>Seller Dashboard</div>;
-const CreatorDashboard = () => <div>Creator Dashboard</div>;
+
 
 /**
  * ProtectedRoute
