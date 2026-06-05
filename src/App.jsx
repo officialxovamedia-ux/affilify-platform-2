@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
+import { useAuth } from './contexts/AuthContext';
 import AuthListener from './lib/auth/AuthListener';
 import { redirectByRole } from './lib/auth/redirectByRole';
 
@@ -19,11 +20,13 @@ import CreatorDashboard from './pages/CreatorDashboard';
  *   2. User's role must match the `allowedRole` prop (if provided)
  */
 function ProtectedRoute({ children, allowedRole }) {
-  const [status, setStatus] = useState('loading'); // 'loading' | 'authorized' | 'unauthorized' | 'wrong-role'
+const { loading: authLoading } = useAuth();  
+const [status, setStatus] = useState('loading'); // 'loading' | 'authorized' | 'unauthorized' | 'wrong-role'
   const [redirectTo, setRedirectTo] = useState(null);
 
   useEffect(() => {
-    const check = async () => {
+if (authLoading) return null;   
+ const check = async () => {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session?.user) {
