@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }) => {
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userId)
+        .eq('auth_id', userId)
         .single();
 
       if (profileError) {
@@ -84,9 +84,10 @@ export const AuthProvider = ({ children }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setLoading(true);
       if (session?.user) {
-        setUser(session.user);
-        const prof = await fetchProfile(session.user.id);
-        setProfile(prof);
+       setProfile(prof);
+setUser(data.user);
+setLoading(false);
+return { user: data.user, profile: prof };
       } else {
         setUser(null);
         setProfile(null);
