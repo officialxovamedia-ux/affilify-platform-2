@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { redirectByRole } from '../lib/auth/redirectByRole';
 
 export default function Signup() {
   const navigate = useNavigate();
+  const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('creator');
@@ -12,47 +13,27 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  e.preventDefault();
 
-    // 1. Create auth user
-    const { data, error: authError } = await supabase.auth.signUp({
+  setError('');
+  setLoading(true);
+
+  try {
+    await signUp(
       email,
       password,
-    });
-
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
-
-    const user = data.user;
-
-    if (!user) {
-      // Email confirmation required — Supabase returns user as null
-      setError('Check your email to confirm your account before signing in.');
-      setLoading(false);
-      return;
-    }
-
-    // 2. Insert profile row with role
-    const { error: dbError } = await supabase.from('users').insert({
-      auth_id: user.id,
-      email: user.email,
       role,
-    });
+      {}
+    );
 
-    if (dbError) {
-      setError('Account created but profile setup failed: ' + dbError.message);
-      setLoading(false);
-      return;
-    }
+    navigate('/pending-approval');
 
-    // 3. Redirect to correct dashboard
-    navigate(redirectByRole(role), { replace: true });
-  };
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div style={styles.container}>

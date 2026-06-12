@@ -39,7 +39,7 @@ export default function SellerDashboard() {
       const { data: campaignData, error: campErr } = await supabase
         .from('campaigns')
         .select('*')
-        .eq('seller_id', user.id)
+        .eq('seller_id', profile?.details?.id)
         .order('created_at', { ascending: false });
 
       if (campErr) throw campErr;
@@ -66,7 +66,7 @@ export default function SellerDashboard() {
 
       // Calculate Stats
       const totalSales = (orderData || []).reduce((acc, curr) => acc + Number(curr.order_amount), 0);
-      const totalCommission = (orderData || []).reduce((acc, curr) => acc + Number(curr.commission_amount), 0);
+      const totalCommission = (orderData || []).reduce((acc, curr) => acc + Number(curr.commission_due), 0);
       
       setSellerStats({
         totalSales,

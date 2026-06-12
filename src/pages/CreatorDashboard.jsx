@@ -30,6 +30,10 @@ export default function CreatorDashboard() {
   const [payoutSuccess, setPayoutSuccess] = useState('');
   const [payoutError, setPayoutError] = useState('');
   const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutMethod, setPayoutMethod] = useState('');
+  const [payoutAccount, setPayoutAccount] = useState('');
+  const [walletTransactions, setWalletTransactions] = useState([]);
+
 
   const fetchData = async () => {
     if (!user) return;
@@ -49,7 +53,7 @@ export default function CreatorDashboard() {
       const { data: codeData, error: codeErr } = await supabase
         .from('promo_codes')
         .select('*, campaigns(*, sellers(*))')
-        .eq('creator_id', user.id);
+        .eq('creator_id', profile?.details?.id);
 
       if (codeErr) throw codeErr;
       setMyCodes(codeData || []);
@@ -58,7 +62,7 @@ export default function CreatorDashboard() {
       const { data: orderData, error: ordErr } = await supabase
         .from('orders')
         .select('*, campaigns(*), promo_codes(*)')
-        .eq('creator_id', user.id)
+        .eq('creator_id', profile?.details?.id)
         .order('created_at', { ascending: false });
 
       if (ordErr) throw ordErr;
@@ -66,7 +70,7 @@ export default function CreatorDashboard() {
 
       // Calculate Stats
       const totalSales = (orderData || []).reduce((acc, curr) => acc + Number(curr.order_amount), 0);
-      const totalCommission = (orderData || []).reduce((acc, curr) => acc + Number(curr.commission_amount), 0);
+      const totalCommission = (orderData || []).reduce((acc, curr) => acc + Number(curr.commission_due), 0);
 
       setCreatorStats({
         totalSales,
@@ -74,7 +78,38 @@ export default function CreatorDashboard() {
         activePromoCodes: (codeData || []).length
       });
 
-      await refreshProfile();
+      const refreshedProf = await refreshProfile();
+      if (refreshedProf?.wallet?.id) {
+        const { data: txData, error: txErr } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('wallet_id', refreshedProf.wallet.id);
+        
+        if (txErr) throw txErr;
+
+        const { data: wrData, error: wrErr } = await supabase
+          .from('withdrawal_requests')
+          .select('*')
+          .eq('wallet_id', refreshedProf.wallet.id);
+
+        if (wrErr) throw wrErr;
+
+        const wrMapped = (wrData || [])
+          .filter(wr => wr.status === 'pending' || wr.status === 'rejected')
+          .map(wr => ({
+            id: wr.id,
+            transaction_type: 'payout',
+            amount: -Number(wr.amount),
+            status: wr.status,
+            created_at: wr.created_at
+          }));
+
+        const allTx = [...(txData || []), ...wrMapped].sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        );
+
+        setWalletTransactions(allTx);
+      }
     } catch (err) {
       console.error('Error fetching creator data:', err);
     } finally {
@@ -96,13 +131,15 @@ export default function CreatorDashboard() {
       
       const randNum = Math.floor(100 + Math.random() * 900);
       const generatedCode = `${handleClean}${randNum}`;
-      
+      console.log('campaignId =', campaignId);
+console.log('creatorId =', profile?.details?.id);
       const { error } = await supabase
         .from('promo_codes')
         .insert([{
           campaign_id: campaignId,
-          creator_id: user.id,
+          creator_id: profile?.details?.id,
           code: generatedCode,
+          discount_type: 'percentage',
           discount_value: 10 // Default 10% discount for followers
         }]);
 
@@ -128,30 +165,41 @@ export default function CreatorDashboard() {
     setPayoutError('');
     
     const amount = Number(payoutAmount);
-    if (isNaN(amount) || amount <= 0) {
-      setPayoutError('Please enter a valid amount.');
+    if (isNaN(amount) || amount < 500) {
+      setPayoutError('Minimum withdrawal is 500 BDT.');
       return;
     }
 
-    if (!profile?.wallet || profile.wallet.balance < amount) {
+    if (!profile?.wallet || Number(profile.wallet.balance) < amount) {
       setPayoutError('Insufficient wallet balance.');
+      return;
+    }
+
+    if (!payoutMethod || !payoutAccount) {
+      setPayoutError('Please select a payment method and provide account details.');
       return;
     }
 
     setPayoutLoading(true);
 
     try {
-      // Simulate deduction
-      const newBal = Number(profile.wallet.balance) - amount;
       const { error } = await supabase
-        .from('wallets')
-        .update({ balance: newBal })
-        .eq('id', profile.wallet.id);
+        .from('withdrawal_requests')
+        .insert([{
+          wallet_id: profile.wallet.id,
+          creator_id: profile.details.id,
+          amount,
+          payment_method: payoutMethod,
+          account_details: payoutAccount,
+          status: 'pending'
+        }]);
 
       if (error) throw error;
 
-      setPayoutSuccess(`Payout request for $${amount.toFixed(2)} submitted successfully! Funds will arrive in your bank account in 2-3 business days.`);
+      setPayoutSuccess(`Withdrawal request for ${amount.toFixed(2)} BDT submitted successfully! Awaiting admin approval.`);
       setPayoutAmount('');
+      setPayoutMethod('');
+      setPayoutAccount('');
       fetchData();
     } catch (err) {
       setPayoutError(err.message || 'Payout failed.');
@@ -401,7 +449,7 @@ export default function CreatorDashboard() {
                         <td className="py-4 px-2 font-bold text-slate-800">{ord.campaigns?.title}</td>
                         <td className="py-4 px-2 font-mono text-brand-600 font-bold">{ord.promo_codes?.code}</td>
                         <td className="py-4 px-2 font-bold text-slate-900">${Number(ord.order_amount).toFixed(2)}</td>
-                        <td className="py-4 px-2 text-emerald-650 font-black">${Number(ord.commission_amount).toFixed(2)}</td>
+                        <td className="py-4 px-2 text-emerald-650 font-black">${Number(ord.commission_due).toFixed(2)}</td>
                         <td className="py-4 px-2">
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                             {ord.status}
@@ -419,75 +467,154 @@ export default function CreatorDashboard() {
       )}
 
       {activeSection === 'wallet' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Balance card */}
-          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold text-slate-900">Earning Wallet</h2>
+        <div className="space-y-8">
 
-            <div className="p-6 bg-gradient-to-br from-brand-900 to-purple-950 rounded-2xl text-white space-y-6">
-              <div>
-                <span className="text-xs text-brand-200 font-bold uppercase tracking-wider">Available Balance</span>
-                <h3 className="text-4xl font-black mt-1">${profile?.wallet?.balance?.toFixed(2) || '0.00'}</h3>
-              </div>
-              
-              <div className="flex justify-between items-center border-t border-brand-800 pt-4 text-sm text-brand-100">
-                <span>Verification State: Approved</span>
-                <span>Promo Codes: {myCodes.length}</span>
-              </div>
+          {/* Balance Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-br from-brand-900 to-purple-950 rounded-3xl p-6 text-white col-span-1 md:col-span-1">
+              <span className="text-xs text-brand-200 font-bold uppercase tracking-wider">Pending Earnings</span>
+              <h3 className="text-4xl font-black mt-2">
+                {Number(profile?.wallet?.pending_balance || 0).toFixed(2)} BDT
+              </h3>
+              <p className="text-xs text-brand-300 mt-2">Awaiting admin approval</p>
             </div>
 
-            <p className="text-xs text-slate-450 leading-relaxed">
-              Earnings are credited to your Available Balance immediately after a buyer completes a purchase using your active referral code.
-            </p>
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Available Balance</span>
+              <h3 className="text-4xl font-black text-emerald-600 mt-2">
+                {Number(profile?.wallet?.balance || 0).toFixed(2)} BDT
+              </h3>
+              <p className="text-xs text-slate-400 mt-2">Ready to withdraw</p>
+            </div>
+
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Earned</span>
+              <h3 className="text-4xl font-black text-slate-800 mt-2">
+                {Number(profile?.wallet?.total_earned || 0).toFixed(2)} BDT
+              </h3>
+              <p className="text-xs text-slate-400 mt-2">All time earnings</p>
+            </div>
           </div>
 
-          {/* Request payout form */}
-          <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-6">
-            <h2 className="text-xl font-bold text-slate-900">Withdraw Funds</h2>
-            
-            {payoutSuccess && (
-              <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-2xl flex items-start space-x-2.5 text-xs">
-                <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                <span>{payoutSuccess}</span>
-              </div>
-            )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Withdrawal Form */}
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-6">
+              <h2 className="text-xl font-bold text-slate-900">Request Withdrawal</h2>
 
-            {payoutError && (
-              <div className="p-4 bg-rose-50 border border-rose-100 text-rose-800 rounded-2xl flex items-start space-x-2.5 text-xs">
-                <HelpCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-                <span>{payoutError}</span>
-              </div>
-            )}
+              {payoutSuccess && (
+                <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-2xl flex items-start space-x-2.5 text-xs">
+                  <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <span>{payoutSuccess}</span>
+                </div>
+              )}
 
-            <form onSubmit={handleRequestPayout} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 block">Amount to Withdraw ($)</label>
-                <div className="relative">
-                  <DollarSign className="absolute left-4 top-3.5 text-slate-400 w-5 h-5" />
-                  <input
-                    type="number"
-                    step="0.01"
+              {payoutError && (
+                <div className="p-4 bg-rose-50 border border-rose-100 text-rose-800 rounded-2xl flex items-start space-x-2.5 text-xs">
+                  <HelpCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <span>{payoutError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleRequestPayout} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 block">
+                    Amount (BDT) — Minimum 500 BDT
+                  </label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-4 top-3.5 text-slate-400 w-5 h-5" />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="500"
+                      required
+                      placeholder="500.00"
+                      className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 focus:border-brand-500 focus:bg-white rounded-2xl text-slate-850 font-bold outline-none transition-all"
+                      value={payoutAmount}
+                      onChange={(e) => setPayoutAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 block">Payment Method</label>
+                  <select
                     required
-                    placeholder="0.00"
-                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 focus:border-brand-500 focus:bg-white rounded-2xl text-slate-850 font-bold outline-none transition-all"
-                    value={payoutAmount}
-                    onChange={(e) => setPayoutAmount(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-brand-500 focus:bg-white rounded-2xl text-slate-800 outline-none"
+                    value={payoutMethod}
+                    onChange={(e) => setPayoutMethod(e.target.value)}
+                  >
+                    <option value="">Select method</option>
+                    <option value="bkash">bKash</option>
+                    <option value="nagad">Nagad</option>
+                    <option value="bank">Bank Transfer</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 block">Account Details</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="bKash/Nagad number or Bank account"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-brand-500 focus:bg-white rounded-2xl text-slate-800 outline-none"
+                    value={payoutAccount}
+                    onChange={(e) => setPayoutAccount(e.target.value)}
                   />
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={payoutLoading || !profile?.wallet?.balance || profile.wallet.balance <= 0}
-                className="w-full gradient-bg hover:opacity-95 text-white font-bold py-3.5 rounded-2xl shadow-xl shadow-brand-500/20 hover:shadow-brand-500/30 flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
-              >
-                {payoutLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <span>Request Instant Payout</span>
+                <button
+                  type="submit"
+                  disabled={payoutLoading || Number(profile?.wallet?.balance || 0) < 500}
+                  className="w-full gradient-bg hover:opacity-95 text-white font-bold py-3.5 rounded-2xl shadow-xl shadow-brand-500/20 flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
+                >
+                  {payoutLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <span>Request Withdrawal</span>
+                  )}
+                </button>
+
+                {Number(profile?.wallet?.balance || 0) < 500 && (
+                  <p className="text-xs text-slate-400 text-center">
+                    Minimum withdrawal is 500 BDT. Current balance: {Number(profile?.wallet?.balance || 0).toFixed(2)} BDT
+                  </p>
                 )}
-              </button>
-            </form>
+              </form>
+            </div>
+
+            {/* Transaction History */}
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-4">
+              <h2 className="text-xl font-bold text-slate-900">Transaction History</h2>
+
+              {walletTransactions.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-sm">
+                  No transactions yet.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {walletTransactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+                      <div>
+                        <p className="text-sm font-bold text-slate-700 capitalize">{tx.transaction_type}</p>
+                        <p className="text-xs text-slate-400">{new Date(tx.created_at).toLocaleDateString('en-GB')}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-black text-sm ${tx.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {tx.amount > 0 ? '+' : ''}{Number(tx.amount).toFixed(2)} BDT
+                        </p>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          tx.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                          tx.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {tx.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

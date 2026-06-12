@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { Sparkles, ArrowLeft, Loader2, Image as ImageIcon, AlertCircle } from 'lucide-react';
 
 export default function CreateCampaign() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   
   const [title, setTitle] = useState('');
@@ -15,6 +15,8 @@ export default function CreateCampaign() {
   const [imageUrl, setImageUrl] = useState('');
   const [commissionRate, setCommissionRate] = useState('15');
   const [discountValue, setDiscountValue] = useState('10');
+  const [commissionType, setCommissionType] = useState('percentage');
+  const [commissionValue, setCommissionValue] = useState('15');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,13 +32,15 @@ export default function CreateCampaign() {
       const { data, error: campErr } = await supabase
         .from('campaigns')
         .insert([{
-          seller_id: user.id,
+          seller_id: profile?.details?.id,
           title,
           description,
           product_name: productName,
           product_url: productUrl,
           image_url: imageUrl || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&q=80&w=300', // Default shirt template image
           commission_rate: Number(commissionRate),
+          commission_type: commissionType,
+          commission_value: Number(commissionValue),
           status: 'active'
         }]);
 
@@ -143,6 +147,37 @@ export default function CreateCampaign() {
                   placeholder="https://unsplash.com/photos/your-product-image.jpg"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 block">Commission Type</label>
+                <select
+                  required
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-brand-500 focus:bg-white rounded-2xl text-slate-800 outline-none transition-all duration-200 font-bold"
+                  value={commissionType}
+                  onChange={(e) => setCommissionType(e.target.value)}
+                >
+                  <option value="percentage">Percentage (%)</option>
+                  <option value="fixed">Fixed Amount ($)</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 block">
+                  Commission Value ({commissionType === 'percentage' ? '%' : '$'})
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step={commissionType === 'percentage' ? '1' : '0.01'}
+                  max={commissionType === 'percentage' ? '100' : undefined}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-brand-500 focus:bg-white rounded-2xl text-slate-800 outline-none transition-all duration-200 font-bold"
+                  value={commissionValue}
+                  onChange={(e) => setCommissionValue(e.target.value)}
                 />
               </div>
             </div>

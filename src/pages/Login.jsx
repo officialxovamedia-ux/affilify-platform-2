@@ -70,6 +70,35 @@ export default function Login() {
           />
 
           {error && <p style={styles.error}>{error}</p>}
+          <div style={{ textAlign: 'right', marginBottom: '10px' }}>
+  <button
+    type="button"
+    onClick={async () => {
+      const email = prompt('Enter your email address');
+
+      if (!email) return;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        alert(error.message);
+      } else {
+        alert('Password reset email sent!');
+      }
+    }}
+    style={{
+      background: 'none',
+      border: 'none',
+      color: '#6366f1',
+      cursor: 'pointer',
+      fontSize: '0.875rem',
+    }}
+  >
+    Forgot Password?
+  </button>
+</div>
 
           <button type="submit" disabled={loading} style={styles.button}>
             {loading ? 'Signing in…' : 'Sign In'}

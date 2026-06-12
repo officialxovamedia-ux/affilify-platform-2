@@ -10,164 +10,166 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId) => {
+  const fetchProfile = async (authUid) => {
     try {
-      // 1. Get primary user profile with role
-      const { data: userProfile, error: profileError } = await supabase
+      const { data: userProfile, error: userError } = await supabase
         .from('users')
-        .select('*')
-        .eq('auth_id', userId)
+        .select('id, auth_id, email, full_name, role, status, rejection_reason, reapply_after, created_at')
+        .eq('auth_id', authUid)
         .single();
 
-      if (profileError) {
-        console.warn('Error fetching primary user profile, trying to create fallback or check role:', profileError);
-        // If profile doesn't exist, we might need to recreate it if auth user exists
+      if (userError || !userProfile) {
+        console.warn('fetchProfile: users row not found:', userError);
         return null;
       }
 
-      // 2. Get specific role details (seller or creator)
+      const usersId = userProfile.id;
+
       let roleDetails = null;
+
       if (userProfile.role === 'seller') {
         const { data, error } = await supabase
           .from('sellers')
-          .select('*')
-          .eq('id', userId)
+          .select('id, user_id, brand_name, website, category, verified, status, created_at')
+          .eq('user_id', usersId)
           .single();
-        if (!error) roleDetails = data;
+        if (!error && data) roleDetails = data;
       } else if (userProfile.role === 'creator') {
         const { data, error } = await supabase
           .from('creators')
-          .select('*')
-          .eq('id', userId)
+          .select('id, user_id, handle, niche, platform, follower_count, commission_rate, verified, status, created_at')
+          .eq('user_id', usersId)
           .single();
-        if (!error) roleDetails = data;
+        if (!error && data) roleDetails = data;
       }
 
-      // 3. Get wallet balance
       let wallet = null;
       const { data: walletData, error: walletError } = await supabase
         .from('wallets')
-        .select('*')
-        .eq('user_id', userId)
+        .select('id, user_id, balance, pending_balance, total_earned, total_withdrawn, currency')
+        .eq('user_id', usersId)
         .single();
-      
-      if (!walletError) {
-        wallet = walletData;
-      }
+      if (!walletError && walletData) wallet = walletData;
 
       return {
         ...userProfile,
         details: roleDetails,
-        wallet: wallet
+        wallet,
       };
     } catch (err) {
-      console.error('Error fetching complete user profile:', err);
+      console.error('fetchProfile: unexpected error:', err);
       return null;
     }
   };
 
   useEffect(() => {
-    // Check active sessions
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        fetchProfile(session.user.id).then((prof) => {
-          setProfile(prof);
-          setLoading(false);
-        });
-      } else {
-        setLoading(false);
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setLoading(true);
-      if (session?.user) {
-       setProfile(prof);
-setUser(data.user);
-setLoading(false);
-return { user: data.user, profile: prof };
-      } else {
-        setUser(null);
-        setProfile(null);
+        const prof = await fetchProfile(session.user.id);
+        setProfile(prof);
       }
       setLoading(false);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setLoading(true);
+        if (session?.user) {
+          setUser(session.user);
+          const prof = await fetchProfile(session.user.id);
+          setProfile(prof);
+        } else {
+          setUser(null);
+          setProfile(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email, password, role, additionalData) => {
+  const signUp = async (email, password, role, additionalData = {}) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            role: role,
+            full_name: additionalData.fullName || '',
+          },
+        },
       });
 
-      if (error) throw error;
-      if (!data.user) throw new Error('Signup failed: user not returned');
+      if (authError) throw authError;
+      if (!data.user) throw new Error('signUp: auth user not returned');
 
-      const userId = data.user.id;
+      const authUid = data.user.id;
 
-      // Create primary user profile entry
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert([{ id: userId, email, role }]);
-
-      if (profileError) {
-        console.error('Failed to create users record:', profileError);
-        throw profileError;
+      let usersRow = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise((r) => setTimeout(r, 500));
+        const { data: row } = await supabase
+          .from('users')
+          .select('id, status')
+          .eq('auth_id', authUid)
+          .single();
+        if (row) { usersRow = row; break; }
       }
 
-      // Create specific role details entry
+      if (!usersRow) {
+        throw new Error('signUp: users row not created by trigger');
+      }
+
+      const usersId = usersRow.id;
+
       if (role === 'seller') {
         const { error: sellerError } = await supabase
           .from('sellers')
           .insert([{
-            id: userId,
-            company_name: additionalData.companyName || '',
-            website: additionalData.website || ''
+            user_id:    usersId,
+            brand_name: additionalData.brandName || '',
+            website:    additionalData.website   || '',
+            category:   additionalData.category  || '',
           }]);
-        if (sellerError) {
-          console.error('Failed to create sellers record:', sellerError);
-          throw sellerError;
-        }
-      } else {
+        if (sellerError) throw sellerError;
+
+      } else if (role === 'creator') {
         const { error: creatorError } = await supabase
           .from('creators')
           .insert([{
-            id: userId,
-            full_name: additionalData.fullName || '',
-            handle: additionalData.handle || '',
-            bio: additionalData.bio || ''
+            user_id:        usersId,
+            handle:         additionalData.handle        || '',
+            niche:          additionalData.niche         || '',
+            platform:       additionalData.platform      || '',
+            follower_count: additionalData.followerCount || 0,
           }]);
-        if (creatorError) {
-          console.error('Failed to create creators record:', creatorError);
-          throw creatorError;
-        }
+        if (creatorError) throw creatorError;
       }
 
-      // Create wallet entry
       const { error: walletError } = await supabase
         .from('wallets')
         .insert([{
-          user_id: userId,
-          balance: 0,
-          pending_balance: 0
+          user_id:         usersId,
+          balance:         0,
+          pending_balance: 0,
+          total_earned:    0,
+          total_withdrawn: 0,
+          currency:        'BDT',
         }]);
       if (walletError) {
-        console.warn('Could not initialize wallet:', walletError);
+        console.warn('signUp: wallet creation failed:', walletError);
       }
 
-      // Trigger profile refresh
-      const prof = await fetchProfile(userId);
+      const prof = await fetchProfile(authUid);
       setProfile(prof);
       setUser(data.user);
+      setLoading(false);
       return { user: data.user, profile: prof };
+
     } catch (err) {
       setLoading(false);
       throw err;
@@ -182,10 +184,11 @@ return { user: data.user, profile: prof };
         password,
       });
       if (error) throw error;
-      
+
       const prof = await fetchProfile(data.user.id);
       setProfile(prof);
       setUser(data.user);
+      setLoading(false);
       return { user: data.user, profile: prof };
     } catch (err) {
       setLoading(false);
@@ -202,14 +205,16 @@ return { user: data.user, profile: prof };
   };
 
   const refreshProfile = async () => {
-    if (user) {
-      const prof = await fetchProfile(user.id);
-      setProfile(prof);
-    }
+    if (!user) return;
+    const prof = await fetchProfile(user.id);
+    setProfile(prof);
+    return prof;
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider
+      value={{ user, profile, loading, signUp, signIn, signOut, refreshProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );
